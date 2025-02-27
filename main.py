@@ -6,6 +6,23 @@ from time import time
 from sys import getrecursionlimit, setrecursionlimit
 
 class LosslessCompressor:
+
+	'''
+	### Lossless Compressor
+
+	#### Info
+
+	Compresses and uncompresses text files using a recursive lossless compression algorithm.
+
+	#### Perameters
+	- (None)
+
+	#### Attributes
+	- `lookup_delimeter: str` - delimeter used to separate lookup table items in output
+	- `text_delimeter: str` - delimeter used to separate lookup table items in output
+	- `lookup_key start: str` - the program works backwards through unicode characters, beginning with this one, to represent chunks in the output
+	- `recursion_limit: int` - the current limit for recursion for the algorithm (this increases automatically if needed)
+	'''
 	
 	def __init__(self) -> None:
 
@@ -16,12 +33,54 @@ class LosslessCompressor:
 
 	def compress(self, paths: list[str]) -> None:
 
-		def gen_output(text: str, lookup: dict) -> str:
+		'''
+		#### Info
+		Compresses each file in the `paths` perameter and saves it to the `compressed/` folder <br>
+		Prints details about the output;
+		- time taken
+		- % compression (bytes + chars)
+		- file size (new vs original) - bytes
+		- % size of lookup table
+
+		#### Perameters
+		- `paths: list[str]` - list of paths to files to compress
+
+		#### Returns
+		- (Nothing - the output is saved to `compressed/` folder automatically)
+		'''
+
+		def gen_output(text: str, lookup: dict[str, str]) -> str:
+
+			'''
+			#### Info
+			Concatenates the lookup dictionary and compressed text in the correct format to be saved.
+			- Uses `self.text_delimeter` to seperate the lookup dictionary from the text
+			- Uses `self.lookup_delimeter` to seperate each key and value pair in the lookup dictionary
+
+			#### Perameters
+			- `text: str` - the compressed text to use in the output
+			- `lookup: dict[str, str]` - the chunk lookup dictionary to use in the output
+
+			#### Returns
+			- `str` - a string of the concatenated lookup dictionary and text
+			'''
 
 			lookup_output = (self.lookup_delimeter.join([f'{item[0]}{item[1]}' for item in lookup.items()]) + f'{self.text_delimeter}') if lookup else ''
 			return lookup_output + text
 
 		def gen_hash_table(text: str, chunk_len: int) -> defaultdict[str, list[int]]:
+
+			'''
+			#### Info
+			Generates a super-fast lookup dictionary containing all `chunk_len` chunks in `text` and their indexes. <br>
+
+			#### Perameters
+			- `text: str` - the text of which to analyse chunks and their indexes
+			- `chunk_len: int` - the length of chunks analysed in the text
+
+			#### Returns	 
+			- `defaultdict[str, list[int]]` - a dictionary whose keys are the chunks, and the values their indexes (`chunk_indexes: list = outputted_dict[chunk: str]`)
+			'''
 
 			hash_table = defaultdict(list)
 
@@ -33,6 +92,11 @@ class LosslessCompressor:
 			return hash_table
 
 		def compress(prev_text: str, prev_lookup: dict) -> tuple[str, dict[str, str]]:
+
+			'''
+			#### Info
+			- The recursive compression algorithm that uses lossless compression.
+			'''
 
 			compressed_text = copy(prev_text)
 			lookup = copy(prev_lookup)
@@ -66,7 +130,7 @@ class LosslessCompressor:
 					compressed_text = compressed_text.replace(chunk, char)
 					try: next_compressed_text, next_lookup = compress(prev_text = compressed_text, prev_lookup = lookup)
 					except RecursionError:
-						self.recursion_limit *= 10
+						self.recursion_limit += 1
 						setrecursionlimit(self.recursion_limit) 
 						next_compressed_text, next_lookup = compress(prev_text = compressed_text, prev_lookup = lookup)
 
@@ -101,11 +165,16 @@ class LosslessCompressor:
 			chars_compression = self.percentage_change(mode = 0, original = len(input_text), new = len(output_text))
 			bytes_compression = self.percentage_change(mode = 0, original = original_size, new = output_size)
 
+			lookup_percentage = round(len(lookup) / len(compressed_text) * 100, 2)
+
 			print(f'completed successfully ({round(time() - start_time, 2)}s);')
-			print(f'| original size: {original_size} bytes')
-			print(f'| compressed size: {output_size} bytes')
-			print(f'| bytes: compressed by {round(bytes_compression, 2)}%')
-			print(f'| chars: compressed by {round(chars_compression, 2)}%')
+			print('| percentage compresssion')
+			print(f'| - bytes: {round(bytes_compression, 2)}%')
+			print(f'| - chars: {round(chars_compression, 2)}%')
+			print('| file size')
+			print(f'| - original: {original_size} bytes')
+			print(f'| - compressed: {output_size} bytes')
+			print(f'| (lookup table {lookup_percentage}% of output)')
 
 	def uncompress(self, paths: list[str]) -> None:
 
@@ -134,10 +203,12 @@ class LosslessCompressor:
 			bytes_uncompression = self.percentage_change(mode = 1, original = original_size, new = output_size)
 
 			print(f'completed successfully ({round(time() - start_time, 2)}s);')
-			print(f'| original size: {original_size} bytes')
-			print(f'| uncompressed size: {output_size} bytes')
-			print(f'| bytes: uncompressed by {round(bytes_uncompression, 2)}%')
-			print(f'| chars: uncompressed by {round(chars_uncompression, 2)}%')
+			print('| percentage uncompresssion')
+			print(f'| - bytes: {round(bytes_uncompression, 2)}%')
+			print(f'| - chars: {round(chars_uncompression, 2)}%')
+			print('| file size')
+			print(f'| - original: {original_size} bytes')
+			print(f'| - compressed: {output_size} bytes')
 	
 	def read_file(self, path: str) -> str: 
 
