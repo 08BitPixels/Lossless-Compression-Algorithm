@@ -15,21 +15,21 @@ class LosslessCompressor:
 	Compresses and uncompresses text files using a recursive lossless compression algorithm.
 
 	#### Perameters
-	- (None)
+	- `mode: int -> 0 or 1` - 0 = priotise byte size when compressing, 1 = prioritise number of characters
 
 	#### Attributes
-	- `lookup_delimeter: str` - delimeter used to separate lookup table items in output
 	- `text_delimeter: str` - delimeter used to separate lookup table items in output
-	- `lookup_key start: str` - the program works backwards through unicode characters, beginning with this one, to represent chunks in the output
-	- `recursion_limit: int` - the current limit for recursion for the algorithm (this increases automatically if needed)
+	- `lookup_delimeter: str` - delimeter used to separate lookup table items in output
+	- `lookup_key_prefix: str` - mode = 0: the character that prefixes another character representing a chunk, so the program knows that it represents another chunk
+							   - mode = 1: the program works backwards through unicode characters, beginning with this one, to represent chunks in the output
 	'''
 	
-	def __init__(self) -> None:
+	def __init__(self, mode: int = 0) -> None:
 
-		self.lookup_delimeter = chr(1)
+		self.mode = mode
 		self.text_delimeter = chr(0)
-		self.lookup_key_start = chr(1114111)
-		self.recursion_limit = getrecursionlimit()
+		self.lookup_delimeter = chr(1)
+		self.lookup_key_prefix = chr(2) if not self.mode else chr(1114111)
 
 	def compress(self, paths: list[str]) -> None:
 
@@ -100,18 +100,20 @@ class LosslessCompressor:
 
 			compressed_text = copy(prev_text)
 			lookup = copy(prev_lookup)
-			hash_table = gen_hash_table(text = compressed_text, chunk_len = 2)
 
-			for chunk_index in range(len(compressed_text) - 2):
+			chunk_len = 2 if self.mode else 3
+			hash_table = gen_hash_table(text = compressed_text, chunk_len = chunk_len)
+
+			for chunk_index in range(len(compressed_text) - chunk_len):
 				
-				chunk = compressed_text[chunk_index: chunk_index + 2]
+				chunk = compressed_text[chunk_index: chunk_index + chunk_len]
 				duplicate_indexes = [i for i in hash_table.get(chunk, []) if i != chunk_index]
 			
 				if duplicate_indexes:
 		
-					char = chr(ord(self.lookup_key_start) - len(lookup))
+					char = chr(ord(self.lookup_key_prefix) - len(lookup)) if self.mode else chr(ord(self.lookup_key_prefix) + 1 + len(lookup))
 					more = True
-					temp_len = 2
+					temp_len = chunk_len
 					prev_same_count = 0
 
 					while more:
@@ -126,22 +128,25 @@ class LosslessCompressor:
 						prev_same_count = len(duplicate_indexes)
 					
 					lookup[char] = chunk
+					compressed_text = compressed_text.replace(chunk, (char) if self.mode else (self.lookup_key_prefix + char))
 
-					compressed_text = compressed_text.replace(chunk, char)
 					try: next_compressed_text, next_lookup = compress(prev_text = compressed_text, prev_lookup = lookup)
 					except RecursionError:
-						self.recursion_limit += 1
-						setrecursionlimit(self.recursion_limit) 
+						setrecursionlimit(getrecursionlimit() + 1) 
 						next_compressed_text, next_lookup = compress(prev_text = compressed_text, prev_lookup = lookup)
 
 					output = gen_output(text = compressed_text, lookup = lookup)
 					next_output = gen_output(text = next_compressed_text, lookup = next_lookup)
 
-					chars_compression = self.percentage_change(mode = 0, original = len(input_text), new = len(output))
-					next_chars_compression = self.percentage_change(mode = 0, original = len(input_text), new = len(next_output))
+					original_size = len(input_text) if self.mode else len(input_text.encode())
+					output_size = len(output) if self.mode else len(output.encode())
+					next_output_size = len(next_output) if self.mode else len(next_output.encode())
+
+					percent_compression = self.percentage_change(mode = 0, original = original_size, new = output_size)
+					next_percent_compression = self.percentage_change(mode = 0, original = original_size, new = next_output_size)
 					
-					if chars_compression < 0 and next_chars_compression < 0: return prev_text, prev_lookup
-					if lookup: return [(compressed_text, lookup), (next_compressed_text, next_lookup)][chars_compression <= next_chars_compression]
+					if percent_compression < 0 and next_percent_compression < 0: return prev_text, prev_lookup
+					if lookup: return [(compressed_text, lookup), (next_compressed_text, next_lookup)][percent_compression <= next_percent_compression]
 			
 			return prev_text, prev_lookup
 
@@ -149,34 +154,57 @@ class LosslessCompressor:
 
 			output_path = f'compressed/{os.path.splitext(os.path.basename(path))[0]}.llc'
 
-			print(f'\ncompressing {path} -> {output_path};')
+			print(f'\ncompressing {path} -> {output_path} (mode = {['bytes', 'characters'][self.mode]});')
 
 			start_time = time()
 			input_text = self.read_file(path)
 			
 			compressed_text, lookup = compress(prev_text = input_text, prev_lookup = {})
 			output_text = gen_output(text = compressed_text, lookup = lookup)
-			
+
+			original_size = len(input_text) if self.mode else len(input_text.encode())
+			output_size = len(output_text) if self.mode else len(output_text.encode())
+
+			percent_compression = self.percentage_change(mode = 0, original = original_size, new = output_size)
+
+			lookup_percentage = round(len(lookup) / len(compressed_text) * 100, 2) if self.mode else round(len(compressed_text.split(self.text_delimeter)[0].encode()) / len(compressed_text.encode()) * 100, 2)
+
 			self.save_file(output_path, output_text)
 
-			original_size = os.stat(path).st_size
-			output_size = os.stat(output_path).st_size
-
-			chars_compression = self.percentage_change(mode = 0, original = len(input_text), new = len(output_text))
-			bytes_compression = self.percentage_change(mode = 0, original = original_size, new = output_size)
-
-			lookup_percentage = round(len(lookup) / len(compressed_text) * 100, 2)
-
 			print(f'completed successfully ({round(time() - start_time, 2)}s);')
-			print('| percentage compresssion')
-			print(f'| - bytes: {round(bytes_compression, 2)}%')
-			print(f'| - chars: {round(chars_compression, 2)}%')
-			print('| file size')
-			print(f'| - original: {original_size} bytes')
-			print(f'| - compressed: {output_size} bytes')
 			print(f'| (lookup table {lookup_percentage}% of output)')
+			print('| percentage compresssion')
+
+			if self.mode:
+				print(f'| - chars: {round(percent_compression, 2)}%')
+			else:
+				print(f'| - bytes: {round(percent_compression, 2)}%')
+				print('| file size')
+				print(f'| - original: {original_size} bytes')
+				print(f'| - compressed: {output_size} bytes')
 
 	def uncompress(self, paths: list[str]) -> None:
+
+		def extract_output(input_compressed: str) -> tuple[str, dict[str, str]]:
+
+			'''
+			#### Info
+			Takes the compressed output and extracts the compressed text and lookup dictionary
+
+			#### Perameters
+			- `output: str` = the raw output from the saved file
+
+			#### Returns
+			- `tuple[` <br>
+			  `    str,` = compressed text <br>
+			  `    dict[str, str]` = lookup dictionary <br>
+			  `]`
+			'''
+
+			lookup = {x[0]: x[1:] for x in input_compressed.split(self.text_delimeter)[0].split(self.lookup_delimeter)}
+			text = '\n'.join(input_compressed.split(self.text_delimeter)[1:])
+
+			return text, lookup
 
 		for path in paths:
 
@@ -188,10 +216,9 @@ class LosslessCompressor:
 
 			start_time = time()
 			input_compressed = self.read_file(path = path)
-			lookup = {x[0]: x[1:] for x in input_compressed.split(self.text_delimeter)[0].split(self.lookup_delimeter)}
-			text = '\n'.join(input_compressed.split(self.text_delimeter)[1:])
+			text, lookup = extract_output(input_compressed)
 
-			for key, item in list(lookup.items())[-1::-1]: text = text.replace(key, item)
+			for char, chunk in list(lookup.items())[-1::-1]: text = text.replace(self.lookup_key_prefix + char, chunk)
 				
 			chars_uncompression = (len(text) - len(input_compressed)) / len(input_compressed) * 100
 			self.save_file(path = output_path, contents = text)
