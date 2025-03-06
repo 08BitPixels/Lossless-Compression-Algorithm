@@ -193,7 +193,7 @@ class LosslessCompressor:
 
 		# lookup details
 		lookup_size = len(compressed_text.split(self.text_delimeter)[0].encode()) if lookup else 0
-		lookup_len = len(compressed_text.split(self.text_delimeter)) if lookup else 0
+		lookup_len = len(compressed_text.split(self.text_delimeter)[0]) if lookup else 0
 		lookup_percentage = round((lookup_size, lookup_len)[mode] / (output_size, output_len)[mode] * 100, 2) # choose whether to calculate % lookup as bytes or chars
 
 		# % compression
@@ -266,7 +266,7 @@ class LosslessCompressor:
 			  `]`
 			'''
 
-			mode = self.lookup_key_prefixes[0] not in input
+			mode = int(self.lookup_key_prefixes[0] not in input)
 			if mode: lookup = {x[0]: x[1:] for x in input.split(self.text_delimeter)[0].split(self.lookup_delimeter)} # if chars mode: keys only 1 char long
 			elif not mode: lookup = {x[0:1]: x[1:] for x in input.split(self.text_delimeter)[0].split(self.lookup_delimeter)} # if bytes mode: keys 2 chars long (prefix + ascii char)
 			text = '\n'.join(input.split(self.text_delimeter)[1:])
@@ -289,7 +289,7 @@ class LosslessCompressor:
 			lookup_key_prefix = self.lookup_key_prefixes[mode]
 
 			# works backwards through lookup and replaces all chars with their corresponding chunks
-			for key, chunk in list(lookup.items())[-1::-1]: text = text.replace([(lookup_key_prefix + key), key][mode], chunk) # mode = 1 -> key only 1 char, mode = 0 -> key 2 chars 
+			for key, chunk in list(lookup.items())[-1::-1]: text = text.replace(((lookup_key_prefix + key), key)[mode], chunk) # mode = 1 -> key only 1 char, mode = 0 -> key 2 chars 
 
 			return text
 		# ------------
@@ -403,6 +403,7 @@ class LosslessCompressor:
 def main() -> None:
 
 	compressor = LosslessCompressor()
+	# compressor.compress(path = 'input.txt', mode = 0)
 	compressor.uncompress(path = 'compressed/input.llc')
 
 if __name__ == '__main__': main()
