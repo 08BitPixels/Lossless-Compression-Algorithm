@@ -171,9 +171,9 @@ class LosslessCompressor:
 			return prev_text, prev_lookup # no compression found
 		# ------------
 
-		output_path = f'compressed/{os.path.splitext(os.path.basename(path))[0]}.llc'
+		output_path = f'compressed/{os.path.splitext(os.path.basename(path))[0]}-compressed.llc'
 
-		print(f'\ncompressing {path} -> {output_path} (mode: {['bytes', 'characters'][mode]});')
+		print(f'\ncompressing {path} -> {output_path} (mode: {('bytes', 'characters')[mode]});')
 
 		# retreives input data
 		start_time = time()
@@ -288,8 +288,11 @@ class LosslessCompressor:
 
 			lookup_key_prefix = self.lookup_key_prefixes[mode]
 
-			# works backwards through lookup and replaces all chars with their corresponding chunks
-			for key, chunk in list(lookup.items())[-1::-1]: text = text.replace(((lookup_key_prefix + key), key)[mode], chunk) # mode = 1 -> key only 1 char, mode = 0 -> key 2 chars 
+			# works backwards through lookup and replaces all chars with their corresponding chunks 
+			for key, chunk in list(lookup.items())[-1::-1]:
+				
+				symbol = ((lookup_key_prefix + key), key)[mode] # mode = 1 -> key only 1 char, mode = 0 -> key 2 chars
+				text = text.replace(symbol, chunk)
 
 			return text
 		# ------------
@@ -297,7 +300,7 @@ class LosslessCompressor:
 		# checks if file to uncompress is a .llc file
 		if os.path.splitext(os.path.basename(path))[1] != '.llc': raise ValueError(f'file {path} is not a .llc file; please enter a valid .llc file path')
 
-		output_path = f'uncompressed/{os.path.splitext(os.path.basename(path))[0]}.txt'
+		output_path = f'uncompressed/{os.path.splitext(os.path.basename(path))[0]}-uncompressed.txt'
 
 		print(f'\nuncompressing {path} -> {output_path};')
 
@@ -312,6 +315,8 @@ class LosslessCompressor:
 		# uncompresses text
 		text, lookup, mode = extract_input(input = input_text)
 		output = uncompress(text = text, lookup = lookup, mode = mode)
+
+		print(f'detected mode: {('bytes', 'characters')[mode]}')
 
 		# output details
 		output_len = len(output)
@@ -403,7 +408,7 @@ class LosslessCompressor:
 def main() -> None:
 
 	compressor = LosslessCompressor()
-	# compressor.compress(path = 'input.txt', mode = 0)
-	compressor.uncompress(path = 'compressed/input.llc')
+	compressor.compress(path = 'input.txt', mode = 0)
+	# compressor.uncompress(path = 'compressed/input.llc')
 
 if __name__ == '__main__': main()
