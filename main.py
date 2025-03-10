@@ -2,9 +2,10 @@ import os
 
 from collections import defaultdict
 from copy import copy
-from time import time
 from sys import getrecursionlimit, setrecursionlimit
+from time import time
 
+# objects
 class LosslessCompressor:
 
 	'''
@@ -300,7 +301,7 @@ class LosslessCompressor:
 		# checks if file to uncompress is a .llc file
 		if os.path.splitext(os.path.basename(path))[1] != '.llc': raise ValueError(f'file {path} is not a .llc file; please enter a valid .llc file path')
 
-		output_path = f'uncompressed/{os.path.splitext(os.path.basename(path))[0]}-uncompressed.txt'
+		output_path = f'uncompressed/{os.path.splitext(os.path.basename(path))[0].replace('-compressed', '-uncompressed')}.txt'
 
 		print(f'\nuncompressing {path} -> {output_path};')
 
@@ -405,10 +406,11 @@ class LosslessCompressor:
 			difference = new - original if mode else original - new
 			return (difference / original) * 100
 
+# main
 def main() -> None:
 
 	compressor = LosslessCompressor()
-	compressor.compress(path = 'input.txt', mode = 0)
-	# compressor.uncompress(path = 'compressed/input.llc')
+	# compressor.compress(path = 'input.txt', mode = 0)
+	compressor.uncompress(path = 'compressed/input-compressed.llc')
 
 if __name__ == '__main__': main()
