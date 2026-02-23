@@ -4,6 +4,7 @@ from collections import defaultdict
 from copy import copy
 from sys import getrecursionlimit, setrecursionlimit
 from time import time
+from textwrap import dedent
 
 # objects
 class LosslessCompressor:
@@ -13,7 +14,7 @@ class LosslessCompressor:
 
 	#### Info
 
-	Compresses and uncompresses text files using a recursive lossless compression algorithm.
+	Compresses and decompresses text files using a recursive lossless compression algorithm.
 	- mode for compressing files: `mode: int (0 or 1)` - `0` = prioritise file size when compressing; `1` = prioritise number of characters
 
 	#### Perameters
@@ -34,7 +35,7 @@ class LosslessCompressor:
 		self.lookup_delimeter = chr(1)
 		self.lookup_key_prefixes = (chr(20), chr(1114111))
 
-	def compress(self, input_path: str, mode: int) -> None:
+	def compress(self, input_folder: str, output_folder: str, mode: int) -> None:
 
 		'''
 		#### Info
@@ -103,7 +104,7 @@ class LosslessCompressor:
 			- The recursive compression algorithm function that creates lossless compression.
 
 			#### Perameters
-			- `prev_text: str`: the previous compressed / uncompressed text to be compressed again
+			- `prev_text: str`: the previous compressed / decompressed text to be compressed again
 			- `prev_lookup: str`: the previous lookup dictionary to be extended
 
 			#### Returns
@@ -172,11 +173,11 @@ class LosslessCompressor:
 			return prev_text, prev_lookup # no compression found
 		# ------------
 
-		paths_to_compress = [input_path + path for path in os.listdir(input_path)]
+		paths_to_compress = [input_folder + "\\" + path for path in os.listdir(input_folder)]
 
 		for path in paths_to_compress:
 
-			output_path = f'output/{os.path.splitext(os.path.basename(path))[0]}.llc'
+			output_path = f'{output_folder}/{os.path.splitext(os.path.basename(path))[0]}.llc'
 
 			print(f'\ncompressing {path} -> {output_path} (mode: {('bytes', 'characters')[mode]});')
 
@@ -222,21 +223,21 @@ class LosslessCompressor:
 			print(f'| - compressed: {output_size} bytes, {output_len} chars ({round(output_size / output_len, 2)} bytes / char)')
 			print(f'| (lookup table {lookup_percentage}% of output)')
 			
-	def uncompress(self, input_path: str) -> None:
+	def decompress(self, input_folder: str, output_folder: str) -> None:
 
 		'''
 		#### Info
-		Unompresses the file at the `path` perameter and saves it as a .llc (.losslesscompressed) to the `uncompressed/` folder <br>
+		Unompresses the file at the `path` perameter and saves it as a .llc (.losslesscompressed) to the `decompressed/` folder <br>
 		Prints details about the output;
 		- time taken
-		- % uncompression (bytes + chars)
+		- % decompression (bytes + chars)
 		- file size (new vs original) - bytes
 
 		#### Perameters
-		- `paths: list[str]` - list of paths of files to uncompress
+		- `paths: list[str]` - list of paths of files to decompress
 
 		#### Returns
-		- (Nothing - the output is saved to the `uncompressed/` folder automatically)
+		- (Nothing - the output is saved to the `decompressed/` folder automatically)
 		'''
 
 		# SUBFUNCTIONS
@@ -266,7 +267,7 @@ class LosslessCompressor:
 
 			return text, lookup, mode
 		
-		def uncompress(text: str, lookup: dict[str, str], mode: int) -> str:
+		def decompress(text: str, lookup: dict[str, str], mode: int) -> str:
 
 			'''
 			#### Info
@@ -276,7 +277,7 @@ class LosslessCompressor:
 			- `input: str` - the raw input text from the .llc file
 
 			#### Returns
-			- `str` - the uncompressed text
+			- `str` - the decompressed text
 			'''
 
 			lookup_key_prefix = self.lookup_key_prefixes[mode]
@@ -290,16 +291,16 @@ class LosslessCompressor:
 			return text
 		# ------------
 
-		paths_to_uncompress = [input_path + path for path in os.listdir(input_path)]
+		paths_to_decompress = [input_folder + path for path in os.listdir(input_folder)]
 
-		for path in paths_to_uncompress:
+		for path in paths_to_decompress:
 
-			# checks if file to uncompress is a .llc file
+			# checks if file to decompress is a .llc file
 			if os.path.splitext(os.path.basename(path))[1] != '.llc': raise ValueError(f'file {path} is not a .llc file; please enter a valid .llc file path')
 
-			output_path = f'output/{os.path.splitext(os.path.basename(path))[0]}.txt'
+			output_path = f'{output_folder}/{os.path.splitext(os.path.basename(path))[0]}.txt'
 
-			print(f'\nuncompressing {path} -> {output_path};')
+			print(f'\ndecompressing {path} -> {output_path};')
 
 			# retreives input data
 			start_time = time()
@@ -309,9 +310,9 @@ class LosslessCompressor:
 			input_len = len(input_text)
 			input_size = len(input_text.encode())
 
-			# uncompresses text
+			# decompresses text
 			text, lookup, mode = extract_input(input = input_text)
-			output = uncompress(text = text, lookup = lookup, mode = mode)
+			output = decompress(text = text, lookup = lookup, mode = mode)
 
 			print(f'detected mode: {('bytes', 'characters')[mode]}')
 
@@ -324,9 +325,9 @@ class LosslessCompressor:
 
 			self.save_file(path = output_path, contents = output)
 
-			# prints uncompression details
+			# prints decompression details
 			print(f'completed successfully ({round(time() - start_time, 5)}s);')
-			print('| percentage uncompresssion:')
+			print('| percentage decompresssion:')
 
 			if mode:
 
@@ -334,7 +335,7 @@ class LosslessCompressor:
 				print(f'| - (bytes: {round(percent_compression_bytes, 2)}%)')
 				print('| number of chars:')
 				print(f'| - compressed: {input_len} chars')
-				print(f'| - uncompressed: {output_len} chars')
+				print(f'| - decompressed: {output_len} chars')
 
 			else:
 
@@ -342,7 +343,7 @@ class LosslessCompressor:
 				print(f'| - (chars: {round(percent_compression_chars, 2)}%)')
 				print('| file size')
 				print(f'| - compressed: {input_size} bytes')
-				print(f'| - uncompressed: {output_size} bytes')
+				print(f'| - decompressed: {output_size} bytes')
 
 	def read_file(self, path: str) -> str: 
 
@@ -402,11 +403,76 @@ class LosslessCompressor:
 			difference = new - original if mode else original - new
 			return (difference / original) * 100
 
+class Console:
+
+	@ staticmethod
+	def input_arg(arg_num: int, folder: bool = False, accepted: list[str] = []) -> str:
+
+		def check_arg(arg: str) -> bool:
+
+			if folder:
+				if not os.path.isdir(arg): 
+					print(f'folder {arg} not found; please enter a valid folder path')
+					return False
+			else:
+				if arg not in accepted:
+					print(f"argument must be one of {accepted}")
+					return False
+			
+			return True
+
+		inp = input(f"enter arg {arg_num} > ").strip().strip("\"\'")
+
+		while not check_arg(inp):
+			inp = input(f"enter arg {arg_num} > ")
+		
+		return inp
+
+	@ staticmethod
+	def input_command() -> list[str]:
+
+		print(dedent(
+		"""
+		COMMAND FORMAT:
+		arg 1: compress / decompress
+		arg 2: "[input folder path]"  -> applies action to all files in this directory (must be ".txt" files if arg 1 = "compress", else must be ".llc" files if arg 2 = "decompress")
+		arg 3: "[output folder path]" -> where processed files are saved
+		arg 3: 0 / 1 -> 0 = priotise file size when compressing; 1 = prioritise number of characters
+		EXAMPLE:
+		compress 
+		"C:\\Documents\\text.txt" 
+		"C:\\Compressed Files\\" 
+		0
+		"""))
+
+		arg1 = Console.input_arg(arg_num = 1, accepted = ["compress", "decompress"])
+		arg2 = Console.input_arg(arg_num = 2, folder = True)
+		arg3 = Console.input_arg(arg_num = 3, folder = True)
+		arg4 = Console.input_arg(arg_num = 4, accepted = ["0", "1"])
+
+		return [arg1, arg2, arg3, arg4]
+
+	@ staticmethod
+	def parse_command(command: list[str]) -> None:
+
+		compressor = LosslessCompressor()
+
+		if command[0] == "compress":
+
+			compressor.compress(input_folder = command[1], output_folder = command[2], mode = int(command[3]))
+		
+		elif command[0] == "decompress":
+
+			compressor.decompress(input_folder = command[1], output_folder = command[2])
+
 # main
 def main() -> None:
 
-	compressor = LosslessCompressor()
-	compressor.compress(input_path = 'input/', mode = 1)
-	# compressor.uncompress(input_path = '')
+	#compress 
+	# "D:\rohan\OneDrive\Documents\Coding Projects\Python\Python\Lossless Compression Algorithm\input\"
+	# "D:\rohan\OneDrive\Documents\Coding Projects\Python\Python\Lossless Compression Algorithm\output\"
+	# 0
+	command = Console.input_command()
+	Console.parse_command(command = command)
 
 if __name__ == '__main__': main()
