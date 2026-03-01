@@ -33,9 +33,9 @@ class LosslessCompressor:
 
 		self.text_delimeter = chr(0)
 		self.lookup_delimeter = chr(1)
-		self.lookup_key_prefixes = (chr(20), chr(1114111))
+		self.lookup_key_prefix = ""
 
-	def compress(self, input_folder: str, output_folder: str, mode: int) -> None:
+	def compress(self, input_folder: str, output_folder: str) -> None:
 
 		'''
 		#### Info
@@ -116,9 +116,8 @@ class LosslessCompressor:
 
 			text = copy(prev_text)
 			lookup = copy(prev_lookup)
-			lookup_key_prefix = self.lookup_key_prefixes[mode]
 
-			chunk_len = (3, 2)[mode] # when mode = 0 -> lookup key len = 3 -> can only check for chunks of len greater (otherwise inf recursion)
+			chunk_len = 2
 			hash_table = gen_hash_table(text = text, chunk_len = chunk_len)
 
 			for chunk_index in range(len(text) - chunk_len + 1): # loops through every chunk index
@@ -128,7 +127,7 @@ class LosslessCompressor:
 			
 				if duplicate_indexes: # if chunk has duplicates -> continue, else skip to next chunk len
 					
-					key = chr(ord(lookup_key_prefix) + 1 + len(lookup)) if not mode else chr(ord(lookup_key_prefix) - len(lookup)) # char used to represent chunk; when mode = 0 -> chars start from start of unicode, work forwards; when mode = 1 -> chars start from end of unicode, work backwards
+					key = chr(ord(self.lookup_key_prefix) + len(lookup) + 1)
 					# extends chunk len and checks if still same amount of duplicates, until num of duplicates decreases
 					more = True
 					temp_len = chunk_len
@@ -146,12 +145,12 @@ class LosslessCompressor:
 						prev_same_count = len(duplicate_indexes)
 					
 					lookup[key] = chunk # adds char + chunk to lookup dict
-					text = text.replace(chunk, (lookup_key_prefix + key, key)[mode]) # replaces chunk in text with char; when mode = 1 -> keys only 1 char, when mode = 0 -> keys 2 chars
+					text = text.replace(chunk, key)
 
 					# generates current output + details
 					output = gen_output(text = text, lookup = lookup) # puts text + lookup into output format
-					output_size = (len(output.encode()), len(output))[mode]
-					percent_compression = self.percentage_change(mode = 0, original = (input_size, input_len)[mode], new = output_size)
+					output_size = len(output.encode())
+					percent_compression = self.percentage_change(mode = 0, original = input_size, new = output_size)
 
 					# compresses again (extends recursion limit if necessary)
 					try: 
@@ -163,8 +162,10 @@ class LosslessCompressor:
 				
 					# generates next output + detals
 					output_next = gen_output(text = text_next, lookup = lookup_next)
-					output_size_next = (len(output_next.encode()), len(output_next))[mode]
-					percent_compression_next = self.percentage_change(mode = 0, original = (input_size, input_len)[mode], new = output_size_next)
+					output_size_next = len(output_next.encode())
+					percent_compression_next = self.percentage_change(mode = 0, original = input_size, new = output_size_next)
+
+					print(output_next)
 					
 					# compares current + next output, returns one with higher % compression
 					if percent_compression < 0 and percent_compression_next < 0: return prev_text, prev_lookup
@@ -177,9 +178,9 @@ class LosslessCompressor:
 
 		for path in paths_to_compress:
 
-			output_path = f'{output_folder}/{os.path.splitext(os.path.basename(path))[0]}.llc'
+			output_path = f'{output_folder}\\{os.path.splitext(os.path.basename(path))[0]}.llc'
 
-			print(f'\ncompressing {path} -> {output_path} (mode: {('bytes', 'characters')[mode]});')
+			print(f'\ncompressing {path} -> {output_path};')
 
 			# retreives input data
 			start_time = time()
@@ -188,6 +189,7 @@ class LosslessCompressor:
 			# input details
 			input_len = len(input_text)
 			input_size = len(input_text.encode())
+			self.lookup_key_prefix = chr(max([ord(char) for char in input_text]))
 			
 			# compresses input
 			compressed_text, lookup = compress(prev_text = input_text, prev_lookup = {})
@@ -200,28 +202,27 @@ class LosslessCompressor:
 			# lookup details
 			lookup_size = len(compressed_text.split(self.text_delimeter)[0].encode()) if lookup else 0
 			lookup_len = len(compressed_text.split(self.text_delimeter)[0]) if lookup else 0
-			lookup_percentage = round((lookup_size, lookup_len)[mode] / (output_size, output_len)[mode] * 100, 2) # choose whether to calculate % lookup as bytes or chars
+			lookup_percentage = round(lookup_size / output_size * 100, 2) # choose whether to calculate % lookup as bytes or chars
 
 			# % compression
-			percent_compression_bytes = self.percentage_change(mode = 0, original = input_size, new = output_size)
-			percent_compression_chars = self.percentage_change(mode = 0, original = input_len, new = output_len)
+			percent_compression_bytes = round(self.percentage_change(mode = 0, original = input_size, new = output_size), 1)
+			percent_compression_chars = round(self.percentage_change(mode = 0, original = input_len, new = output_len), 1)
 
 			self.save_file(output_path, output_text)
 
 			# prints compression details
-			print(f'completed successfully ({round(time() - start_time, 5)}s);')
-			print('| percentage compresssion:')
+			print(f'compressed successfully ({round(time() - start_time, 3)}s);')
 
-			if (percent_compression_bytes, percent_compression_chars)[mode] == 0.0:
+			if percent_compression_bytes == 0.0:
 
-				print(f'| (no {('byte', 'character')[mode]} compresson found)')
+				print('- (no compresson found)')
 				return
-
-			print(f'| - chars: {round(percent_compression_chars, 2)}% (ratio {round(input_len / output_len, 1)}:1)')
-			print(f'| - bytes: {round(percent_compression_bytes, 2)}% (ratio {round(input_size / output_size, 1)}:1)')
-			print(f'| - original: {input_size} bytes, {input_len} chars ({round(input_size / input_len, 2)} bytes / char)')
-			print(f'| - compressed: {output_size} bytes, {output_len} chars ({round(output_size / output_len, 2)} bytes / char)')
-			print(f'| (lookup table {lookup_percentage}% of output)')
+			
+			print(f'- size (bytes):    {input_size} -> {output_size} (decreased by {percent_compression_bytes}%)')
+			print(f'- number of chars: {input_len} -> {output_len} (decreased by {percent_compression_chars}%)')
+			print(f'- bytes / char:    {round(input_size / input_len, 2)} -> {round(output_size / output_len, 2)}')
+			print(f'- (lookup table: {lookup_size} bytes, {lookup_len} chars ({lookup_percentage}% of output)')
+			print(f'- (compressed text: {output_size - lookup_size} bytes, {output_len - lookup_len} chars ({round(100 - lookup_percentage, 2)}% of output)')
 			
 	def decompress(self, input_folder: str, output_folder: str) -> None:
 
@@ -241,7 +242,7 @@ class LosslessCompressor:
 		'''
 
 		# SUBFUNCTIONS
-		def extract_input(input: str) -> tuple[str, dict[str, str], int]:
+		def extract_input(input: str) -> tuple[str, dict[str, str]]:
 
 			'''
 			#### Info
@@ -260,14 +261,12 @@ class LosslessCompressor:
 			  `]`
 			'''
 
-			mode = int(self.lookup_key_prefixes[0] not in input)
-			if mode: lookup = {x[0]: x[1:] for x in input.split(self.text_delimeter)[0].split(self.lookup_delimeter)} # if chars mode: keys only 1 char long
-			elif not mode: lookup = {x[0]: x[1:] for x in input.split(self.text_delimeter)[0].split(self.lookup_delimeter)} # if bytes mode: keys 2 chars long (prefix + ascii char)
+			lookup = {x[0]: x[1:] for x in input.split(self.text_delimeter)[0].split(self.lookup_delimeter)}
 			text = '\n'.join(input.split(self.text_delimeter)[1:])
 
-			return text, lookup, mode
+			return text, lookup
 		
-		def decompress(text: str, lookup: dict[str, str], mode: int) -> str:
+		def decompress(text: str, lookup: dict[str, str]) -> str:
 
 			'''
 			#### Info
@@ -280,25 +279,21 @@ class LosslessCompressor:
 			- `str` - the decompressed text
 			'''
 
-			lookup_key_prefix = self.lookup_key_prefixes[mode]
-
 			# works backwards through lookup and replaces all chars with their corresponding chunks 
 			for key, chunk in list(lookup.items())[-1::-1]:
-				
-				symbol = ((lookup_key_prefix + key), key)[mode] # mode = 1 -> key only 1 char, mode = 0 -> key 2 chars
-				text = text.replace(symbol, chunk)
+				text = text.replace(key, chunk)
 
 			return text
 		# ------------
 
-		paths_to_decompress = [input_folder + path for path in os.listdir(input_folder)]
+		paths_to_decompress = [input_folder + "\\" + path for path in os.listdir(input_folder)]
 
 		for path in paths_to_decompress:
 
 			# checks if file to decompress is a .llc file
 			if os.path.splitext(os.path.basename(path))[1] != '.llc': raise ValueError(f'file {path} is not a .llc file; please enter a valid .llc file path')
 
-			output_path = f'{output_folder}/{os.path.splitext(os.path.basename(path))[0]}.txt'
+			output_path = f'{output_folder}\\{os.path.splitext(os.path.basename(path))[0]}.txt'
 
 			print(f'\ndecompressing {path} -> {output_path};')
 
@@ -311,39 +306,24 @@ class LosslessCompressor:
 			input_size = len(input_text.encode())
 
 			# decompresses text
-			text, lookup, mode = extract_input(input = input_text)
-			output = decompress(text = text, lookup = lookup, mode = mode)
-
-			print(f'detected mode: {('bytes', 'characters')[mode]}')
+			text, lookup = extract_input(input = input_text)
+			output = decompress(text = text, lookup = lookup)
 
 			# output details
 			output_len = len(output)
 			output_size = len(output.encode())
 
-			percent_compression_bytes = self.percentage_change(mode = 1, original = input_size, new = output_size)
-			percent_compression_chars = self.percentage_change(mode = 1, original = input_len, new = output_len)
+			percent_decompression_bytes = round(self.percentage_change(mode = 1, original = input_size, new = output_size), 1)
+			percent_decompression_chars = round(self.percentage_change(mode = 1, original = input_len, new = output_len), 1)
 
 			self.save_file(path = output_path, contents = output)
 
 			# prints decompression details
-			print(f'completed successfully ({round(time() - start_time, 5)}s);')
-			print('| percentage decompresssion:')
+			print(f'decompressed successfully ({round(time() - start_time, 5)}s);')
 
-			if mode:
-
-				print(f'| - chars: {round(percent_compression_chars, 2)}%')
-				print(f'| - (bytes: {round(percent_compression_bytes, 2)}%)')
-				print('| number of chars:')
-				print(f'| - compressed: {input_len} chars')
-				print(f'| - decompressed: {output_len} chars')
-
-			else:
-
-				print(f'| - bytes: {round(percent_compression_bytes, 2)}%')
-				print(f'| - (chars: {round(percent_compression_chars, 2)}%)')
-				print('| file size')
-				print(f'| - compressed: {input_size} bytes')
-				print(f'| - decompressed: {output_size} bytes')
+			print(f'- size (bytes):    {input_size} -> {output_size} (increased by {percent_decompression_bytes}%)')
+			print(f'- number of chars: {input_len} -> {output_len} (increased by {percent_decompression_chars}%)')
+			print(f'- bytes / char:    {round(input_size / input_len, 2)} -> {round(output_size / output_len, 2)}')
 
 	def read_file(self, path: str) -> str: 
 
@@ -387,21 +367,21 @@ class LosslessCompressor:
 
 	def percentage_change(self, mode: int, original: float, new: float) -> float:
 
-			'''
-			#### Info
-			Calculates the percentage increase / decrease from `original` and `new`.
+		'''
+		#### Info
+		Calculates the percentage increase / decrease from `original` and `new`.
 
-			#### Perameters
-			- `mode: int (0 or 1)` - 0 = calculate percentage decrease; 1 = calculate percentage increase
-			- `original: float` - the original number for the calculation
-			- `new: float` - the new number to calculate the percentage change from `original`
+		#### Perameters
+		- `mode: int (0 or 1)` - 0 = calculate percentage decrease; 1 = calculate percentage increase
+		- `original: float` - the original number for the calculation
+		- `new: float` - the new number to calculate the percentage change from `original`
 
-			#### Returns
-			- `float` - the percentage increase / decrease from `original` to `new`
-			'''
+		#### Returns
+		- `float` - the percentage increase / decrease from `original` to `new`
+		'''
 
-			difference = new - original if mode else original - new
-			return (difference / original) * 100
+		difference = new - original if mode else original - new
+		return (difference / original) * 100
 
 class Console:
 
@@ -429,50 +409,42 @@ class Console:
 		return inp
 
 	@ staticmethod
-	def input_command() -> list[str]:
+	def input_command() -> tuple[str, str, str]:
 
 		print(dedent(
 		"""
 		COMMAND FORMAT:
-		arg 1: compress / decompress
+		arg 1: 0 or 1 -> 0 = compress, 1 = decompress
 		arg 2: "[input folder path]"  -> applies action to all files in this directory (must be ".txt" files if arg 1 = "compress", else must be ".llc" files if arg 2 = "decompress")
 		arg 3: "[output folder path]" -> where processed files are saved
-		arg 3: 0 / 1 -> 0 = priotise file size when compressing; 1 = prioritise number of characters
-		EXAMPLE:
-		compress 
-		"C:\\Documents\\text.txt" 
-		"C:\\Compressed Files\\" 
-		0
 		"""))
 
-		arg1 = Console.input_arg(arg_num = 1, accepted = ["compress", "decompress"])
+		arg1 = Console.input_arg(arg_num = 1, accepted = ["0", "1"])
 		arg2 = Console.input_arg(arg_num = 2, folder = True)
 		arg3 = Console.input_arg(arg_num = 3, folder = True)
-		arg4 = Console.input_arg(arg_num = 4, accepted = ["0", "1"])
 
-		return [arg1, arg2, arg3, arg4]
+		return (arg1, arg2, arg3)
 
 	@ staticmethod
-	def parse_command(command: list[str]) -> None:
+	def parse_command(command: tuple[str, str, str]) -> None:
 
 		compressor = LosslessCompressor()
 
-		if command[0] == "compress":
-
-			compressor.compress(input_folder = command[1], output_folder = command[2], mode = int(command[3]))
+		if command[0] == "0":
+			compressor.compress(input_folder = command[1], output_folder = command[2])
 		
-		elif command[0] == "decompress":
+		elif command[0] == "1":
 
 			compressor.decompress(input_folder = command[1], output_folder = command[2])
 
 # main
 def main() -> None:
 
-	#compress 
 	# "D:\rohan\OneDrive\Documents\Coding Projects\Python\Python\Lossless Compression Algorithm\input\"
 	# "D:\rohan\OneDrive\Documents\Coding Projects\Python\Python\Lossless Compression Algorithm\output\"
-	# 0
-	command = Console.input_command()
-	Console.parse_command(command = command)
+	#command = Console.input_command()
+	Console.parse_command(command = ("0", "D:\\rohan\\OneDrive\\Documents\\Coding Projects\\Python\\Python\\Lossless Compression Algorithm\\input\\", "D:\\rohan\\OneDrive\\Documents\\Coding Projects\\Python\\Python\\Lossless Compression Algorithm\\output\\"))
+
+	input("\nAll tasks complete; press [ENTER] to end program... ")
 
 if __name__ == '__main__': main()
